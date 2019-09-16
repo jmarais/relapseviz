@@ -43,6 +43,12 @@ func Translate(s string, full bool) (*gographviz.Graph, error) {
 	}
 	return TranslateGrammar(g, full), nil
 }
+
+// Translate the given ast.Grammer to a graphviz Graph.
+// 'full' traverse extra nodes which the relapse walker skips.
+// The node names are generated from the ast type name while a edge
+// name will be the fieldname of the edge source.
+// The list of struct fields are also listed in the node under the name.
 func TranslateGrammar(g *ast.Grammar, full bool) *gographviz.Graph {
 	t := &translator{
 		graph: gographviz.NewGraph(),
@@ -56,7 +62,7 @@ func TranslateGrammar(g *ast.Grammar, full bool) *gographviz.Graph {
 		panic(err)
 	}
 	nodeLabel := getTypeName(g)
-	t.translate(g, "root"+nodeLabel)
+	t.translate(g, nodeLabel, `root`)
 	return t.graph
 }
 
@@ -68,324 +74,569 @@ func getTypeName(v interface{}) string {
 	return ss[len(ss)-1]
 }
 
-func (t *translator) translate(node interface{}, nodeId string) {
+func (t *translator) translate(node interface{}, nodeName, suffix string) {
+	nodeId := nodeName + suffix
+	label := newLabel(nodeName)
 	switch v := node.(type) {
 	case *ast.Grammar:
-		label := newLabel(getTypeName(v))
 		if v.After != nil {
 			label.write(`\nAfter: \"`, v.After.String(), `\"`)
 		}
 		t.addNode(nodeId, map[string]string{attrLabel: label.finish()})
-		if t.full {
-			if v.After != nil {
-				t.down(nodeId, v.After)
-			}
-		}
 		if v.TopPattern != nil {
-			t.down(nodeId, v.TopPattern)
+			t.down(nodeId, v.TopPattern, `TopPattern`)
 		}
 		for i, pdecl := range v.PatternDecls {
 			nextNodeName := getTypeName(pdecl)
-			nextNodeId := nextNodeName + strconv.FormatUint(t.r.Uint64(), 10)
-			t.addEdge(nodeId, nextNodeId, map[string]string{attrLabel: fmt.Sprintf("\"%v[%d]\"", nextNodeName, i)})
-			t.translate(pdecl, nextNodeId)
+			suff := strconv.FormatUint(t.r.Uint64(), 10)
+			t.addEdge(nodeId, nextNodeName+suff, map[string]string{attrLabel: fmt.Sprintf(`"%v[%d]"`, `PatternDecls`, i)})
+			t.translate(pdecl, nextNodeName, suff)
+		}
+		if t.full {
+			if v.After != nil {
+				t.down(nodeId, v.After, `After`)
+			}
 		}
 	case *ast.PatternDecl:
-		label := newLabel(getTypeName(v))
-		if v.Name != "" {
-			label.write(`\nName: `, v.Name)
-		}
 		if v.Hash != nil {
 			label.write(`\nHash: `, v.Hash.String())
+		}
+		if v.Before != nil {
+			label.write(`\nBefore: \"`, v.Before.String(), `\"`)
+		}
+		if v.Name != "" {
+			label.write(`\nName: `, v.Name)
 		}
 		if v.Eq != nil {
 			label.write(`\nEq: `, v.Eq.String())
 		}
-		if v.Before != nil {
-			label.write(`\nBefore: `, v.Before.String())
+		if v.Pattern != nil {
+			label.write(`\nPattern: `, `Pattern`)
 		}
 		t.addNode(nodeId, map[string]string{attrLabel: label.finish()})
+
 		if t.full {
 			if v.Hash != nil {
-				t.down(nodeId, v.Hash)
+				t.down(nodeId, v.Hash, `Hash`)
 			}
 			if v.Eq != nil {
-				t.down(nodeId, v.Eq)
+				t.down(nodeId, v.Eq, `Eq`)
 			}
 			if v.Before != nil {
-				t.down(nodeId, v.Before)
+				t.down(nodeId, v.Before, `Before`)
 			}
 		}
 		if v.Pattern != nil {
-			t.down(nodeId, v.Pattern)
+			t.down(nodeId, v.Pattern, `Pattern`)
 		}
 	case *ast.Pattern:
-		label := newLabel(getTypeName(v))
 		t.addNode(nodeId, map[string]string{attrLabel: label.finish()})
 		if v.Empty != nil {
-			t.down(nodeId, v.Empty)
+			t.down(nodeId, v.Empty, `Empty`)
 		}
 		if v.TreeNode != nil {
-			t.down(nodeId, v.TreeNode)
+			t.down(nodeId, v.TreeNode, `TreeNode`)
 		}
 		if v.LeafNode != nil {
-			t.down(nodeId, v.LeafNode)
+			t.down(nodeId, v.LeafNode, `LeafNode`)
 		}
 		if v.Concat != nil {
-			t.down(nodeId, v.Concat)
+			t.down(nodeId, v.Concat, `Concat`)
 		}
 		if v.Or != nil {
-			t.down(nodeId, v.Or)
+			t.down(nodeId, v.Or, `Or`)
 		}
 		if v.And != nil {
-			t.down(nodeId, v.And)
+			t.down(nodeId, v.And, `And`)
 		}
 		if v.ZeroOrMore != nil {
-			t.down(nodeId, v.ZeroOrMore)
+			t.down(nodeId, v.ZeroOrMore, `ZeroOrMore`)
 		}
 		if v.Reference != nil {
-			t.down(nodeId, v.Reference)
+			t.down(nodeId, v.Reference, `Reference`)
 		}
 		if v.Not != nil {
-			t.down(nodeId, v.Not)
+			t.down(nodeId, v.Not, `Not`)
 		}
 		if v.ZAny != nil {
-			t.down(nodeId, v.ZAny)
+			t.down(nodeId, v.ZAny, `ZAny`)
 		}
 		if v.Contains != nil {
-			t.down(nodeId, v.Contains)
+			t.down(nodeId, v.Contains, `Contains`)
 		}
 		if v.Optional != nil {
-			t.down(nodeId, v.Optional)
+			t.down(nodeId, v.Optional, `Optional`)
 		}
 		if v.Interleave != nil {
-			t.down(nodeId, v.Interleave)
+			t.down(nodeId, v.Interleave, `Interleave`)
 		}
 	case *ast.Empty:
-		label := newLabel(getTypeName(v))
 		if v.Empty != nil {
 			label.write(`\nEmpty: \"`, v.Empty.String(), `\"`)
 		}
 		t.addNode(nodeId, map[string]string{attrLabel: label.finish()})
 		if t.full {
 			if v.Empty != nil {
-				t.down(nodeId, v.Empty)
+				t.down(nodeId, v.Empty, `Empty`)
 			}
 		}
 	case *ast.TreeNode:
-		label := newLabel(getTypeName(v))
 		if v.Name != nil {
 			label.write(`\nName: `, v.Name.String())
 		}
 		if v.Colon != nil {
 			label.write(`\nColon: `, v.Colon.String())
 		}
+		if v.Pattern != nil {
+			label.write(`\nPattern: `, `Pattern`)
+		}
 		t.addNode(nodeId, map[string]string{attrLabel: label.finish()})
+		if v.Name != nil {
+			t.down(nodeId, v.Name, `Name`)
+		}
 		if t.full {
 			if v.Colon != nil {
-				t.down(nodeId, v.Colon)
+				t.down(nodeId, v.Colon, `Colon`)
 			}
 		}
-		if v.Name != nil {
-			t.down(nodeId, v.Name)
+		if v.Pattern != nil {
+			t.down(nodeId, v.Pattern, `Pattern`)
+		}
+	case *ast.Contains:
+		if v.Dot != nil {
+			label.write(`\nDot: `, v.Dot.String())
 		}
 		if v.Pattern != nil {
-			t.down(nodeId, v.Pattern)
+			label.write(`\nPattern: `, `Pattern`)
+		}
+		t.addNode(nodeId, map[string]string{attrLabel: label.finish()})
+		if t.full {
+			if v.Dot != nil {
+				t.down(nodeId, v.Dot, `Dot`)
+			}
+		}
+		if v.Pattern != nil {
+			t.down(nodeId, v.Pattern, `Pattern`)
 		}
 	case *ast.LeafNode:
-		label := newLabel(getTypeName(v))
+		if v.Expr != nil {
+			label.write(`\nExpr: `, `Expr`)
+		}
 		t.addNode(nodeId, map[string]string{attrLabel: label.finish()})
 		if v.Expr != nil {
-			t.down(nodeId, v.Expr)
+			t.down(nodeId, v.Expr, `Expr`)
 		}
 	case *ast.Concat:
-		label := newLabel(getTypeName(v))
-		t.addNode(nodeId, map[string]string{attrLabel: label.finish()})
+		if v.OpenBracket != nil {
+			label.write(`\nOpenBracket: `, v.OpenBracket.String())
+		}
 		if v.LeftPattern != nil {
-			t.down(nodeId, v.LeftPattern)
+			label.write(`\nLeftPattern: `, `LeftPattern`)
+		}
+		if v.Comma != nil {
+			label.write(`\nComma: `, v.Comma.String())
 		}
 		if v.RightPattern != nil {
-			t.down(nodeId, v.RightPattern)
+			label.write(`\nRightPattern: `, `RightPattern`)
+		}
+		if v.ExtraComma != nil {
+			label.write(`\nComma: `, v.ExtraComma.String())
+		}
+		if v.OpenBracket != nil {
+			label.write(`\nCloseBracket: `, v.CloseBracket.String())
+		}
+		t.addNode(nodeId, map[string]string{attrLabel: label.finish()})
+		if t.full {
+			if v.OpenBracket != nil {
+				t.down(nodeId, v.OpenBracket, `OpenBracket`)
+			}
+		}
+		if v.LeftPattern != nil {
+			t.down(nodeId, v.LeftPattern, `LeftPattern`)
+		}
+		if t.full {
+			if v.Comma != nil {
+				t.down(nodeId, v.Comma, `Comma`)
+			}
+		}
+		if v.RightPattern != nil {
+			t.down(nodeId, v.RightPattern, `RightPattern`)
+		}
+		if t.full {
+			if v.ExtraComma != nil {
+				t.down(nodeId, v.ExtraComma, `ExtraComma`)
+			}
+			if v.CloseBracket != nil {
+				t.down(nodeId, v.CloseBracket, `CloseBracket`)
+			}
 		}
 	case *ast.Or:
-		label := newLabel(getTypeName(v))
+		if v.OpenParen != nil {
+			label.write(`\nOpenParen: `, v.OpenParen.String())
+		}
+		if v.LeftPattern != nil {
+			label.write(`\nLeftPattern: `, `LeftPattern`)
+		}
 		if v.Pipe != nil {
 			label.write(`\nPipe: `, v.Pipe.String())
 		}
+		if v.RightPattern != nil {
+			label.write(`\nRightPattern: `, `RightPattern`)
+		}
+		if v.CloseParen != nil {
+			label.write(`\nCloseParen: `, v.CloseParen.String())
+		}
 		t.addNode(nodeId, map[string]string{attrLabel: label.finish()})
+		if t.full {
+			if v.OpenParen != nil {
+				t.down(nodeId, v.OpenParen, `OpenParen`)
+			}
+		}
 		if v.LeftPattern != nil {
-			t.down(nodeId, v.LeftPattern)
+			t.down(nodeId, v.LeftPattern, `LeftPattern`)
+		}
+		if t.full {
+			if v.Pipe != nil {
+				t.down(nodeId, v.Pipe, `Pipe`)
+			}
 		}
 		if v.RightPattern != nil {
-			t.down(nodeId, v.RightPattern)
+			t.down(nodeId, v.RightPattern, `RightPattern`)
+		}
+		if t.full {
+			if v.CloseParen != nil {
+				t.down(nodeId, v.CloseParen, `CloseParen`)
+			}
 		}
 	case *ast.And:
-		label := newLabel(getTypeName(v))
+		if v.OpenParen != nil {
+			label.write(`\nOpenParen: `, v.OpenParen.String())
+		}
+		if v.LeftPattern != nil {
+			label.write(`\nLeftPattern: `, `LeftPattern`)
+		}
 		if v.Ampersand != nil {
 			label.write(`\nAmpersand: `, v.Ampersand.String())
 		}
+		if v.RightPattern != nil {
+			label.write(`\nRightPattern: `, `RightPattern`)
+		}
+		if v.CloseParen != nil {
+			label.write(`\nCloseParen: `, v.CloseParen.String())
+		}
 		t.addNode(nodeId, map[string]string{attrLabel: label.finish()})
+		if t.full {
+			if v.OpenParen != nil {
+				t.down(nodeId, v.OpenParen, `OpenParen`)
+			}
+		}
 		if v.LeftPattern != nil {
-			t.down(nodeId, v.LeftPattern)
+			t.down(nodeId, v.LeftPattern, `LeftPattern`)
+		}
+		if t.full {
+			if v.Ampersand != nil {
+				t.down(nodeId, v.Ampersand, `Ampersand`)
+			}
 		}
 		if v.RightPattern != nil {
-			t.down(nodeId, v.RightPattern)
+			t.down(nodeId, v.RightPattern, `RightPattern`)
+		}
+		if t.full {
+			if v.CloseParen != nil {
+				t.down(nodeId, v.CloseParen, `CloseParen`)
+			}
 		}
 	case *ast.ZeroOrMore:
-		label := newLabel(getTypeName(v))
-		t.addNode(nodeId, map[string]string{attrLabel: label.finish()})
+		if v.OpenParen != nil {
+			label.write(`\nOpenParen: `, v.OpenParen.String())
+		}
 		if v.Pattern != nil {
-			t.down(nodeId, v.Pattern)
+			label.write(`\nPattern: `, `Pattern`)
+		}
+		if v.CloseParen != nil {
+			label.write(`\nCloseParen: `, v.CloseParen.String())
+		}
+		if v.Star != nil {
+			label.write(`\nStar: `, v.Star.String())
+		}
+		t.addNode(nodeId, map[string]string{attrLabel: label.finish()})
+		if t.full {
+			if v.OpenParen != nil {
+				t.down(nodeId, v.OpenParen, `OpenParen`)
+			}
+		}
+		if v.Pattern != nil {
+			t.down(nodeId, v.Pattern, `Pattern`)
+		}
+		if t.full {
+			if v.CloseParen != nil {
+				t.down(nodeId, v.CloseParen, `CloseParen`)
+			}
+			if v.Star != nil {
+				t.down(nodeId, v.Star, `Star`)
+			}
 		}
 	case *ast.Reference:
-		label := newLabel(getTypeName(v))
+		if v.At != nil {
+			label.write(`\nAt: `, v.At.String())
+		}
+		if v.Name != "" {
+			label.write(`\nName: `, v.Name)
+		}
 		t.addNode(nodeId, map[string]string{attrLabel: label.finish()})
+		if t.full {
+			if v.At != nil {
+				t.down(nodeId, v.At, `At`)
+			}
+		}
 	case *ast.Not:
-		label := newLabel(getTypeName(v))
-		t.addNode(nodeId, map[string]string{attrLabel: label.finish()})
+		if v.Exclamation != nil {
+			label.write(`\nExclamation: `, v.Exclamation.String())
+		}
+		if v.OpenParen != nil {
+			label.write(`\nOpenParen: `, v.OpenParen.String())
+		}
 		if v.Pattern != nil {
-			t.down(nodeId, v.Pattern)
+			label.write(`\nPattern: `, `Pattern`)
+		}
+		if v.CloseParen != nil {
+			label.write(`\nCloseParen: `, v.CloseParen.String())
+		}
+		t.addNode(nodeId, map[string]string{attrLabel: label.finish()})
+		if t.full {
+			if v.Exclamation != nil {
+				t.down(nodeId, v.Exclamation, `Exclamation`)
+			}
+			if v.OpenParen != nil {
+				t.down(nodeId, v.OpenParen, `OpenParen`)
+			}
+		}
+		if v.Pattern != nil {
+			t.down(nodeId, v.Pattern, `Pattern`)
+		}
+		if t.full {
+			if v.CloseParen != nil {
+				t.down(nodeId, v.CloseParen, `CloseParen`)
+			}
 		}
 	case *ast.ZAny:
-		label := newLabel(getTypeName(v))
 		if v.Star != nil {
 			label.write(`\nStar: `, v.Star.String())
 		}
 		t.addNode(nodeId, map[string]string{attrLabel: label.finish()})
 		if t.full {
 			if v.Star != nil {
-				t.down(nodeId, v.Star)
+				t.down(nodeId, v.Star, `Star`)
 			}
 		}
-	case *ast.Contains:
-		label := newLabel(getTypeName(v))
-		t.addNode(nodeId, map[string]string{attrLabel: label.finish()})
-		if v.Pattern != nil {
-			t.down(nodeId, v.Pattern)
-		}
 	case *ast.Optional:
-		label := newLabel(getTypeName(v))
+		if v.OpenParen != nil {
+			label.write(`\nOpenParen: `, v.OpenParen.String())
+		}
+		if v.Pattern != nil {
+			label.write(`\nPattern: `, `Pattern`)
+		}
+		if v.CloseParen != nil {
+			label.write(`\nCloseParen: `, v.CloseParen.String())
+		}
+		if v.QuestionMark != nil {
+			label.write(`\nQuestionMark: `, v.QuestionMark.String())
+		}
 		t.addNode(nodeId, map[string]string{attrLabel: label.finish()})
 		if v.Pattern != nil {
-			t.down(nodeId, v.Pattern)
+			t.down(nodeId, v.Pattern, `Pattern`)
+		}
+		if t.full {
+
+			if v.OpenParen != nil {
+				t.down(nodeId, v.OpenParen, `OpenParen`)
+			}
+		}
+		if v.Pattern != nil {
+			t.down(nodeId, v.Pattern, `Pattern`)
+		}
+		if t.full {
+			if v.CloseParen != nil {
+				t.down(nodeId, v.CloseParen, `CloseParen`)
+			}
+			if v.QuestionMark != nil {
+				t.down(nodeId, v.QuestionMark, `QuestionMark`)
+			}
 		}
 	case *ast.Interleave:
-		label := newLabel(getTypeName(v))
-		label.write(`\n`)
 		if v.OpenCurly != nil {
-			label.write(v.OpenCurly.String())
+			label.write(`\nOpenCurly: `, v.OpenCurly.String())
 		}
 		if v.LeftPattern != nil {
-			label.write(`Left`)
+			label.write(`\nLeftPattern: `, `LeftPattern`)
 		}
 		if v.SemiColon != nil {
-			label.write(v.SemiColon.String())
-		}
-		if v.SemiColon != nil {
-			label.write(`Right`)
-		}
-		if v.ExtraSemiColon != nil {
-			label.write(v.ExtraSemiColon.String())
-		}
-		if v.CloseCurly != nil {
-			label.write(v.CloseCurly.String())
-		}
-		t.addNode(nodeId, map[string]string{attrLabel: label.finish()})
-		if v.LeftPattern != nil {
-			t.down(nodeId, v.LeftPattern)
+			label.write(`\nSemiColon: `, v.SemiColon.String())
 		}
 		if v.RightPattern != nil {
-			t.down(nodeId, v.RightPattern)
+			label.write(`\nRightPattern: `, `RightPattern`)
+		}
+		if v.ExtraSemiColon != nil {
+			label.write(`\nExtraSemiColon: `, v.ExtraSemiColon.String())
+		}
+		if v.CloseCurly != nil {
+			label.write(`\nCloseCurly: `, v.CloseCurly.String())
+		}
+		t.addNode(nodeId, map[string]string{attrLabel: label.finish()})
+		if t.full {
+			if v.OpenCurly != nil {
+				t.down(nodeId, v.OpenCurly, `OpenCurly`)
+			}
+		}
+		if v.LeftPattern != nil {
+			t.down(nodeId, v.LeftPattern, `LeftPattern`)
+		}
+		if t.full {
+			if v.SemiColon != nil {
+				t.down(nodeId, v.SemiColon, `SemiColon`)
+			}
+		}
+		if v.RightPattern != nil {
+			t.down(nodeId, v.RightPattern, `RightPattern`)
+		}
+		if t.full {
+			if v.ExtraSemiColon != nil {
+				t.down(nodeId, v.ExtraSemiColon, `ExtraSemiColon`)
+			}
+			if v.CloseCurly != nil {
+				t.down(nodeId, v.CloseCurly, `CloseCurly`)
+			}
 		}
 	case *ast.Expr:
-		label := newLabel(getTypeName(v))
 		if v.RightArrow != nil {
 			label.write(`\nRightArrow: `, v.RightArrow.String())
 		}
 		if v.Comma != nil {
 			label.write(`\nComma: `, v.Comma.String())
 		}
-		t.addNode(nodeId, map[string]string{attrLabel: label.finish()})
 		if v.Terminal != nil {
-			t.down(nodeId, v.Terminal)
+			label.write(`\nTerminal: `, `Terminal`)
 		}
 		if v.List != nil {
-			t.down(nodeId, v.List)
+			label.write(`\nList: `, `List`)
 		}
 		if v.Function != nil {
-			t.down(nodeId, v.Function)
+			label.write(`\nFunction: `, `Function`)
 		}
 		if v.BuiltIn != nil {
-			t.down(nodeId, v.BuiltIn)
+			label.write(`\nBuiltIn: `, `BuiltIn`)
 		}
-	case *ast.NameExpr:
-		label := newLabel(getTypeName(v))
 		t.addNode(nodeId, map[string]string{attrLabel: label.finish()})
-		if v.Name != nil {
-			t.down(nodeId, v.Name)
+		if t.full {
+			if v.RightArrow != nil {
+				t.down(nodeId, v.RightArrow, `RightArrow`)
+			}
+			if v.Comma != nil {
+				t.down(nodeId, v.Comma, `Comma`)
+			}
 		}
-		if v.AnyName != nil {
-			t.down(nodeId, v.AnyName)
+		if v.Terminal != nil {
+			t.down(nodeId, v.Terminal, `Terminal`)
 		}
-		if v.AnyNameExcept != nil {
-			t.down(nodeId, v.AnyNameExcept)
+		if v.List != nil {
+			t.down(nodeId, v.List, `List`)
 		}
-		if v.NameChoice != nil {
-			t.down(nodeId, v.NameChoice)
+		if v.Function != nil {
+			t.down(nodeId, v.Function, `Function`)
 		}
-	case *ast.Name:
-		label := newLabel(getTypeName(v))
-		t.addNode(nodeId, map[string]string{attrLabel: label.finish()})
-	case *ast.AnyName:
-		label := newLabel(getTypeName(v))
-		t.addNode(nodeId, map[string]string{attrLabel: label.finish()})
-	case *ast.AnyNameExcept:
-		label := newLabel(getTypeName(v))
-		t.addNode(nodeId, map[string]string{attrLabel: label.finish()})
-		if v.Except != nil {
-			t.down(nodeId, v.Except)
-		}
-	case *ast.NameChoice:
-		label := newLabel(getTypeName(v))
-		t.addNode(nodeId, map[string]string{attrLabel: label.finish()})
-		if v.Left != nil {
-			t.down(nodeId, v.Left)
-		}
-		if v.Right != nil {
-			t.down(nodeId, v.Right)
+		if v.BuiltIn != nil {
+			t.down(nodeId, v.BuiltIn, `BuiltIn`)
 		}
 	case *ast.List:
-		label := newLabel(getTypeName(v))
+		if v.Before != nil {
+			label.write(`\nBefore: \"`, v.Before.String(), `\"`)
+		}
+		label.write(`\nType: `, types.Type_name[int32(v.Type)])
+		if v.OpenCurly != nil {
+			label.write(`\nOpenCurly: `, v.OpenCurly.String())
+		}
+		if v.Elems != nil {
+			label.write(`\nElems: `, `Elems`)
+		}
+		if v.CloseCurly != nil {
+			label.write(`\nCloseCurly: `, v.CloseCurly.String())
+		}
 		t.addNode(nodeId, map[string]string{attrLabel: label.finish()})
+		if t.full {
+			if v.Before != nil {
+				t.down(nodeId, v.Before, `Before`)
+			}
+			if v.OpenCurly != nil {
+				t.down(nodeId, v.OpenCurly, `OpenCurly`)
+			}
+		}
 		for i, e := range v.GetElems() {
 			nextNodeName := getTypeName(e)
-			nextNodeId := nextNodeName + strconv.FormatUint(t.r.Uint64(), 10)
-			t.addEdge(nodeId, nextNodeId, map[string]string{attrLabel: fmt.Sprintf("\"%v[%d]\"", nextNodeName, i)})
-			t.translate(e, nextNodeId)
+			suff := strconv.FormatUint(t.r.Uint64(), 10)
+			t.addEdge(nodeId, nextNodeName+suff, map[string]string{attrLabel: fmt.Sprintf(`"%v[%d]"`, `Elems`, i)})
+			t.translate(e, nextNodeName, suff)
+		}
+		if t.full {
+			if v.CloseCurly != nil {
+				t.down(nodeId, v.CloseCurly, `CloseCurly`)
+			}
 		}
 	case *ast.Function:
-		label := newLabel(getTypeName(v))
+		if v.Before != nil {
+			label.write(`\nBefore: \"`, v.Before.String(), `\"`)
+		}
 		if v.Name != "" {
 			label.write(`\nName: `, v.Name)
 		}
+		if v.OpenParen != nil {
+			label.write(`\nOpenParen: `, v.OpenParen.String())
+		}
+		if v.Params != nil {
+			label.write(`\nParams: `, `Params`)
+		}
+		if v.CloseParen != nil {
+			label.write(`\nCloseParen: `, v.CloseParen.String())
+		}
 		t.addNode(nodeId, map[string]string{attrLabel: label.finish()})
+		if t.full {
+			if v.Before != nil {
+				t.down(nodeId, v.Before, `Before`)
+			}
+			if v.OpenParen != nil {
+				t.down(nodeId, v.OpenParen, `OpenParen`)
+			}
+		}
 		for i, e := range v.GetParams() {
 			nextNodeName := getTypeName(e)
-			nextNodeId := nextNodeName + strconv.FormatUint(t.r.Uint64(), 10)
-			t.addEdge(nodeId, nextNodeId, map[string]string{attrLabel: fmt.Sprintf("\"%v[%d]\"", nextNodeName, i)})
-			t.translate(e, nextNodeId)
+			suff := strconv.FormatUint(t.r.Uint64(), 10)
+			t.addEdge(nodeId, nextNodeName+suff, map[string]string{attrLabel: fmt.Sprintf(`"%v[%d]"`, `Params`, i)})
+			t.translate(e, nextNodeName, suff)
+		}
+		if t.full {
+			if v.CloseParen != nil {
+				t.down(nodeId, v.CloseParen, `CloseParen`)
+			}
 		}
 	case *ast.BuiltIn:
-		label := newLabel(getTypeName(v))
 		if v.Symbol != nil {
 			label.write(`\nSymbol: `, v.Symbol.String())
 		}
-		t.addNode(nodeId, map[string]string{attrLabel: label.finish()})
 		if v.Expr != nil {
-			t.down(nodeId, v.Expr)
+			label.write(`\nExpr: `, `Expr`)
+		}
+		t.addNode(nodeId, map[string]string{attrLabel: label.finish()})
+		if t.full {
+			if v.Symbol != nil {
+				t.down(nodeId, v.Symbol, `Symbol`)
+			}
+		}
+		if v.Expr != nil {
+			t.down(nodeId, v.Expr, `Expr`)
 		}
 	case *ast.Terminal:
-		label := newLabel(getTypeName(v))
+		if v.Before != nil {
+			label.write(`\nBefore: \"`, v.Before.String(), `\"`)
+		}
 		if v.Literal != "" {
 			label.write(`\nLiteral: `, strings.Replace(v.Literal, "\"", "\\\"", -1))
 		}
@@ -407,48 +658,168 @@ func (t *translator) translate(node interface{}, nodeId string) {
 		if v.BytesValue != nil {
 			label.write(`\nBytesValue: `, string(v.BytesValue))
 		}
-		if v.Before != nil {
-			label.write(`\nBefore: \"`, v.Before.String(), `\"`)
+		if v.Variable != nil {
+			label.write(`\nVariable: `, `Variable`)
 		}
 		t.addNode(nodeId, map[string]string{attrLabel: label.finish()})
+		if t.full {
+			if v.Before != nil {
+				t.down(nodeId, v.Before, `Before`)
+			}
+		}
 		if v.Variable != nil {
-			t.down(nodeId, v.Variable)
+			t.down(nodeId, v.Variable, `Variable`)
 		}
 	case *ast.Variable:
 		name := types.Type_name[int32(v.Type)]
-		label := newLabel(getTypeName(v))
 		label.write(`:\nType:`, name)
 		t.addNode(nodeId, map[string]string{attrLabel: label.finish()})
+	case *ast.Keyword:
+		if v.Before != nil {
+			label.write(`\nBefore: \"`, v.Before.String(), `\"`)
+		}
+		if v.Value != "" {
+			label.write(`\nValue: \"`, v.Value, `\"`)
+		}
+		t.addNode(nodeId, map[string]string{attrLabel: label.finish()})
+		if t.full {
+			if v.Before != nil {
+				t.down(nodeId, v.Before, `Before`)
+			}
+		}
 	case *ast.Space:
-		label := newLabel(getTypeName(v))
 		for i, s := range v.Space {
 			label.write(`\nSpace[`, strconv.Itoa(i), `]: \"`, s, `\"`)
 		}
 		t.addNode(nodeId, map[string]string{attrLabel: label.finish()})
-	case *ast.Keyword:
-		label := newLabel(getTypeName(v))
-		if v.Value != "" {
-			label.write(`\nValue: \"`, v.Value, `\"`)
+	case *ast.NameExpr:
+		t.addNode(nodeId, map[string]string{attrLabel: label.finish()})
+		if v.Name != nil {
+			t.down(nodeId, v.Name, `Name`)
 		}
+		if v.AnyName != nil {
+			t.down(nodeId, v.AnyName, `AnyName`)
+		}
+		if v.AnyNameExcept != nil {
+			t.down(nodeId, v.AnyNameExcept, `AnyNameExcept`)
+		}
+		if v.NameChoice != nil {
+			t.down(nodeId, v.NameChoice, `NameChoice`)
+		}
+	case *ast.Name:
 		if v.Before != nil {
 			label.write(`\nBefore: \"`, v.Before.String(), `\"`)
 		}
-		t.addNode(nodeId, map[string]string{attrLabel: label.finish()})
-		if v.Before != nil {
-			t.down(nodeId, v.Before)
+		if v.DoubleValue != nil {
+			label.write(`\nDoubleValue: `, strconv.FormatFloat(*v.DoubleValue, 'E', -1, 64))
 		}
-	}
+		if v.IntValue != nil {
+			label.write(`\nIntValue: `, strconv.FormatInt(*v.IntValue, 10))
+		}
+		if v.UintValue != nil {
+			label.write(`\nUintValue: `, strconv.FormatUint(*v.UintValue, 10))
+		}
+		if v.BoolValue != nil {
+			label.write(`\nBoolValue: `, strconv.FormatBool(*v.BoolValue))
+		}
+		if v.StringValue != nil {
+			label.write(`\nStringValue: `, *v.StringValue)
+		}
+		if v.BytesValue != nil {
+			label.write(`\nBytesValue: `, string(v.BytesValue))
+		}
+		t.addNode(nodeId, map[string]string{attrLabel: label.finish()})
+	case *ast.AnyName:
+		if v.Underscore != nil {
+			label.write(`\nUnderscore: `, v.Underscore.String())
+		}
+		t.addNode(nodeId, map[string]string{attrLabel: label.finish()})
+		if t.full {
+			if v.Underscore != nil {
+				t.down(nodeId, v.Underscore, `Underscore`)
+			}
+		}
+	case *ast.AnyNameExcept:
+		if v.Exclamation != nil {
+			label.write(`\nExclamation: `, v.Exclamation.String())
+		}
+		if v.OpenParen != nil {
+			label.write(`\nOpenParen: `, v.OpenParen.String())
+		}
+		if v.Except != nil {
+			label.write(`\nExcept: `, `Except`)
+		}
+		if v.CloseParen != nil {
+			label.write(`\nCloseParen: `, v.CloseParen.String())
+		}
+		t.addNode(nodeId, map[string]string{attrLabel: label.finish()})
+		if t.full {
+			if v.Exclamation != nil {
+				t.down(nodeId, v.Exclamation, `Exclamation`)
+			}
+			if v.OpenParen != nil {
+				t.down(nodeId, v.OpenParen, `OpenParen`)
+			}
+		}
+		if v.Except != nil {
+			t.down(nodeId, v.Except, `Except`)
+		}
+		if t.full {
+			if v.CloseParen != nil {
+				t.down(nodeId, v.CloseParen, `CloseParen`)
+			}
+		}
+	case *ast.NameChoice:
+		if v.OpenParen != nil {
+			label.write(`\nOpenParen: `, v.OpenParen.String())
+		}
+		if v.Left != nil {
+			label.write(`\nLeft: `, `Left`)
+		}
+		if v.Pipe != nil {
+			label.write(`\nPipe: `, v.Pipe.String())
+		}
+		if v.Right != nil {
+			label.write(`\nRight: `, `Right`)
+		}
+		if v.CloseParen != nil {
+			label.write(`\nCloseParen: `, v.CloseParen.String())
+		}
+		t.addNode(nodeId, map[string]string{attrLabel: label.finish()})
+		if t.full {
+			if v.OpenParen != nil {
+				t.down(nodeId, v.OpenParen, `OpenParen`)
+			}
+		}
+		if v.Left != nil {
+			t.down(nodeId, v.Left, `Left`)
 
-	fmt.Printf("Unknown\n")
+		}
+		if t.full {
+			if v.Pipe != nil {
+				t.down(nodeId, v.Pipe, `Pipe`)
+			}
+		}
+		if v.Right != nil {
+			t.down(nodeId, v.Right, `Right`)
+		}
+		if t.full {
+			if v.CloseParen != nil {
+				t.down(nodeId, v.CloseParen, `CloseParen`)
+			}
+		}
+	default:
+		panic(fmt.Sprintf(`unknown ast node of type "%T" and value "%v"`, v, v))
+	}
 }
 
 var attrLabel = string(gographviz.Label)
 
-func (t *translator) down(nodeId string, to interface{}) {
+func (t *translator) down(nodeId string, to interface{}, edgeLabelName string) {
 	nextNodeName := getTypeName(to)
-	nextNodeId := nextNodeName + strconv.FormatUint(t.r.Uint64(), 10)
-	t.addEdge(nodeId, nextNodeId, map[string]string{attrLabel: nextNodeName})
-	t.translate(to, nextNodeId)
+	suffix := strconv.FormatUint(t.r.Uint64(), 10)
+	t.addEdge(nodeId, nextNodeName+suffix, map[string]string{attrLabel: edgeLabelName})
+	t.translate(to, nextNodeName, suffix)
 }
 
 func (t *translator) addNode(name string, attr map[string]string) {
